@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>匿名リアルタイムSNS</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: sans-serif; margin: 0; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .hidden { display: none !important; }
+
+      
+        #login-area { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; }
+
+      
+        #main-area { width: 90%; max-width: 1000px; height: 80vh; background: white; display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        header { background: #1890ff; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
+
+        .content { display: flex; flex: 1; overflow: hidden; }
+        #chat-section { flex: 2; display: flex; flex-direction: column; border-right: 1px solid #eee; }
+        #sidebar { flex: 1; background: #fafafa; display: flex; flex-direction: column; }
+
+        #messages, #notifications, #user-list { list-style: none; padding: 10px; margin: 0; overflow-y: auto; }
+        #messages { flex: 1; }
+        #notifications { height: 150px; border-top: 1px solid #eee; background: #fffbe6; font-size: 0.85em; }
+
+        .msg-item { margin-bottom: 8px; }
+        .private-msg { background: #fff0f6; border-left: 4px solid #eb2f96; padding: 5px; }
+        .user-item { cursor: pointer; color: #1890ff; padding: 5px; border-bottom: 1px solid #eee; }
+        .user-item:hover { background: #e6f7ff; }
+
+        .input-area { padding: 15px; border-top: 1px solid #eee; display: flex; gap: 10px; }
+        input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <div id="login-area">
+        <h2>匿名SNSへようこそ</h2>
+        <input type="text" id="username-input" placeholder="捨ての名前を入力...">
+        <button onclick="login()">入室</button>
+    </div>
+
+    <div id="main-area" class="hidden">
+        <header>
+            <span id="display-name"></span>
+            <button onclick="logout()" style="background: #ff4d4f; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">ログアウト</button>
+        </header>
+
+        <div class="content">
+            <div id="chat-section">
+                <ul id="messages"></ul>
+                <div class="input-area">
+                    <input type="text" id="msg-input" placeholder="メッセージを入力...">
+                    <button onclick="sendMessage()">送信</button>
+                </div>
+            </div>
+
+            <div id="sidebar">
+                <div id="user-list-container" style="border: 1px solid #ccc; padding: 10px; background: #fff;">
+                    <h3>オンラインユーザー</h3>
+                    <ul id="user-list">
+                        </ul>
+                </div>
+                <div style="padding: 10px; font-weight: bold; border-top: 1px solid #eee;">システム通知</div>
+                <ul id="notifications"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let myName = "";
+
+        function login() {
+            const input = document.getElementById('username-input');
+            if (input.value.trim()) {
+                myName = input.value;
+                document.getElementById('display-name').textContent = `ログイン中: ${myName}`;
+                socket.emit('login', myName);
+                document.getElementById('login-area').classList.add('hidden');
+                document.getElementById('main-area').classList.remove('hidden');
+            }
+        }
+
+        function logout() {
+            socket.emit('logout');
+          
+            document.getElementById('main-area').classList.add('hidden');
+            document.getElementById('login-area').classList.remove('hidden');
+            document.getElementById('messages').innerHTML = "";
+            document.getElementById('notifications').innerHTML = "";
+            document.getElementById('username-input').value = "";
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('msg-input');
+            if (input.value.trim()) {
+                socket.emit('send_message', input.value);
+                input.value = '';
+            }
+        }
+
+        function sendPrivate(toId, toName) {
+            const msg = prompt(`${toName}さんへの個人メッセージ:`);
+            if (msg) {
+                socket.emit('private_message', { toId, text: msg });
+                addMessage(`(私 -> ${toName}): ${msg}`, 'private-msg');
+            }
+        }
+
+       
+        socket.on('receive_message', (data) => {
+            addMessage(`<strong>${data.user}:</strong> ${data.text} <small style="color:#999">${data.time}</small>`);
+        });
+
+        socket.on('receive_private_message', (data) => {
+            addMessage(`[個人] <strong>${data.fromUser}:</strong> ${data.text}`, 'private-msg');
+        });
+
+        socket.on('sys_message', (msg) => {
+            const li = document.createElement('li');
+            li.style.color = '#888';
+            li.style.fontSize = '0.8em';
+            li.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            document.getElementById('notifications').prepend(li);
+        });
+
+        socket.on('user_list', (users) => {
+            const list = document.getElementById('user-list');
+            list.innerHTML = "";
+            users.forEach(user => {
+                const li = document.createElement('li');
+                li.className = 'user-item';
+                li.textContent = user.username + (user.id === socket.id ? " (自分)" : "");
+                if (user.id !== socket.id) {
+                    li.onclick = () => sendPrivate(user.id, user.username);
+                }
+                list.appendChild(li);
+            });
+        });
+
+        function addMessage(html, className = '') {
+            const li = document.createElement('li');
+            li.className = 'msg-item ' + className;
+            li.innerHTML = html;
+            const msgList = document.getElementById('messages');
+            msgList.appendChild(li);
+            msgList.scrollTop = msgList.scrollHeight;
+        }
+
+      
+        socket.on('user_list', (users) => {
+            const listElement = document.getElementById('user-list');
+            listElement.innerHTML = ""; 
+
+            users.forEach(user => {
+                const li = document.createElement('li');
+
+            
+                const displayName = (user.id === socket.id) ? `${user.username} (自分)` : user.username;
+                li.textContent = displayName;
+
+               
+                if (user.id !== socket.id) {
+                    li.style.color = "blue";
+                    li.style.cursor = "pointer";
+                    li.onclick = () => {
+                        const msg = prompt(`${user.username}さんへの個人メッセージ:`);
+                        if (msg) {
+                            socket.emit('private_message', { toId: user.id, text: msg });
+                        }
+                    };
+                }
+
+                listElement.appendChild(li);
+            });
+        });
+
+        
+
+      /*
+      socket.on('receive_private_message', (data) => {
+            alert(`${data.fromUser}さんからの秘密のメッセージ: ${data.text}`);
+            // 
+        */
+        
+    </script>
+</body>
+</html>
