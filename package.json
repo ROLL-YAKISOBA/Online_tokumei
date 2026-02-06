@@ -1,0 +1,25 @@
+{
+  "name": "node-socket-sns-2026",
+  "version": "1.0.0",
+  "description": "Real-time SNS with chat and call requests",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [
+    "nodejs",
+    "socket.io",
+    "express",
+    "realtime"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.21.0",
+    "socket.io": "^4.8.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
